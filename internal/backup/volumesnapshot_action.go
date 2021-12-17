@@ -56,6 +56,8 @@ func (p *VolumeSnapshotBackupItemAction) AppliesTo() (velero.ResourceSelector, e
 	}, nil
 }
 
+// zhou: README,
+
 // Execute backs up a CSI volumesnapshot object and captures, as labels and annotations, information from its associated volumesnapshotcontents such as CSI driver name, storage snapshot handle
 // and namespace and name of the snapshot delete secret, if any. It returns the volumesnapshotclass and the volumesnapshotcontents as additional items to be backed up.
 func (p *VolumeSnapshotBackupItemAction) Execute(item runtime.Unstructured, backup *velerov1api.Backup) (runtime.Unstructured, []velero.ResourceIdentifier,
@@ -88,12 +90,16 @@ func (p *VolumeSnapshotBackupItemAction) Execute(item runtime.Unstructured, back
 	// existence of the velerov1api.BackupNameLabel indicates that the volumesnapshot was created while backing up a
 	// CSI backed PVC.
 
+	// zhou: flag indicating whether it is a Velero triggered snapshot.
+
 	// We want to await reconciliation of only those volumesnapshots created during the ongoing backup.
 	// For this we will wait only if the backup label exists on the volumesnapshot object and the
 	// backup name is the same as that of the value of the backupLabel
 	backupOngoing := vs.Labels[velerov1api.BackupNameLabel] == label.GetValidName(backup.Name)
 
 	p.Log.Infof("Getting VolumesnapshotContent for Volumesnapshot %s/%s", vs.Namespace, vs.Name)
+
+	// zhou: wait until VolumeSnapshotContent generated.
 
 	vsc, err := util.GetVolumeSnapshotContentForVolumeSnapshot(&vs, snapshotClient.SnapshotV1(), p.Log, backupOngoing, backup.Spec.CSISnapshotTimeout.Duration)
 	if err != nil {
@@ -120,6 +126,9 @@ func (p *VolumeSnapshotBackupItemAction) Execute(item runtime.Unstructured, back
 			GroupResource: kuberesource.VolumeSnapshotContents,
 			Name:          vsc.Name,
 		})
+
+		// zhou: these annotations describing VolumeSnapshotContent info, may be used in restore.
+
 		annotations[util.CSIVSCDeletionPolicy] = string(vsc.Spec.DeletionPolicy)
 
 		if vsc.Status != nil {

@@ -30,14 +30,20 @@ import (
 func main() {
 	veleroplugin.NewServer().
 		BindFlags(pflag.CommandLine).
+		// zhou: backup
 		RegisterBackupItemActionV2("velero.io/csi-pvc-backupper", newPVCBackupItemAction).
 		RegisterBackupItemActionV2("velero.io/csi-volumesnapshot-backupper", newVolumeSnapshotBackupItemAction).
 		RegisterBackupItemActionV2("velero.io/csi-volumesnapshotclass-backupper", newVolumesnapshotClassBackupItemAction).
 		RegisterBackupItemActionV2("velero.io/csi-volumesnapshotcontent-backupper", newVolumeSnapContentBackupItemAction).
+
+		// zhou: restore
 		RegisterRestoreItemActionV2("velero.io/csi-pvc-restorer", newPVCRestoreItemAction).
 		RegisterRestoreItemActionV2("velero.io/csi-volumesnapshot-restorer", newVolumeSnapshotRestoreItemAction).
 		RegisterRestoreItemActionV2("velero.io/csi-volumesnapshotclass-restorer", newVolumeSnapshotClassRestoreItemAction).
 		RegisterRestoreItemActionV2("velero.io/csi-volumesnapshotcontent-restorer", newVolumeSnapshotContentRestoreItemAction).
+
+		// zhou: delete
+
 		RegisterDeleteItemAction("velero.io/csi-volumesnapshot-delete", newVolumeSnapshotDeleteItemAction).
 		RegisterDeleteItemAction("velero.io/csi-volumesnapshotcontent-delete", newVolumeSnapshotContentDeleteItemAction).
 		Serve()

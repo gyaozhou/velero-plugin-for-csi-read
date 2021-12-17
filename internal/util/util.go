@@ -99,6 +99,8 @@ func Contains(slice []string, key string) bool {
 	return false
 }
 
+// zhou: restic already backup this volume
+
 func IsPVCDefaultToFSBackup(pvcNamespace, pvcName string, podClient corev1client.PodsGetter, defaultVolumesToFsBackup bool) (bool, error) {
 	pods, err := GetPodsUsingPVC(pvcNamespace, pvcName, podClient)
 	if err != nil {
@@ -120,6 +122,9 @@ func IsPVCDefaultToFSBackup(pvcNamespace, pvcName string, podClient corev1client
 
 	return false, nil
 }
+
+// zhou: same "Provisioner" and has label "velero.io/csi-volumesnapshot-class".
+
 func GetVolumeSnapshotClass(provisioner string, backup *velerov1api.Backup, pvc *corev1api.PersistentVolumeClaim, log logrus.FieldLogger, snapshotClient snapshotter.SnapshotV1Interface) (*snapshotv1api.VolumeSnapshotClass, error) {
 	snapshotClasses, err := snapshotClient.VolumeSnapshotClasses().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
@@ -196,7 +201,12 @@ func GetVolumeSnapshotClassForStorageClass(provisioner string, snapshotClasses *
 	// other fields in the spec.
 	// https://github.com/kubernetes-csi/external-snapshotter/blob/release-4.2/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
 	for _, sc := range snapshotClasses.Items {
+		// zhou: must have this label "velero.io/csi-volumesnapshot-class" to indicate
+		//       FIXME, if only one "sc" matched the provisoner, why not return success.
 		_, hasLabelSelector := sc.Labels[VolumeSnapshotClassSelectorLabel]
+
+		// zhou: get the first "sc" match the creteria.
+
 		if sc.Driver == provisioner {
 			n += 1
 			vsclass = sc
@@ -212,6 +222,11 @@ func GetVolumeSnapshotClassForStorageClass(provisioner string, snapshotClasses *
 	return nil, errors.Errorf("failed to get volumesnapshotclass for provisioner %s, ensure that the desired volumesnapshot class has the %s label", provisioner, VolumeSnapshotClassSelectorLabel)
 }
 
+// zhou: "shouldWait" indicate whether this VolumeSnapshot is triggered by Velero.
+//       If yes, here should wait for its completion.
+//       If no, it means the CSI snapshot is out of Velero. But we still need to backup related
+//       VolumeSnapshotContent if it exist.
+
 // GetVolumeSnapshotContentForVolumeSnapshot returns the volumesnapshotcontent object associated with the volumesnapshot
 func GetVolumeSnapshotContentForVolumeSnapshot(volSnap *snapshotv1api.VolumeSnapshot, snapshotClient snapshotter.SnapshotV1Interface, log logrus.FieldLogger, shouldWait bool, csiSnapshotTimeout time.Duration) (*snapshotv1api.VolumeSnapshotContent, error) {
 	if !shouldWait {
@@ -219,6 +234,7 @@ func GetVolumeSnapshotContentForVolumeSnapshot(volSnap *snapshotv1api.VolumeSnap
 			// volumesnapshot hasn't been reconciled and we're not waiting for it.
 			return nil, nil
 		}
+		// zhou: the snapshot completed, we should backup related VolumeSnapshotContent object.
 		vsc, err := snapshotClient.VolumeSnapshotContents().Get(context.TODO(), *volSnap.Status.BoundVolumeSnapshotContentName, metav1.GetOptions{})
 		if err != nil {
 			return nil, errors.Wrap(err, "error getting volume snapshot content from API")
@@ -226,11 +242,14 @@ func GetVolumeSnapshotContentForVolumeSnapshot(volSnap *snapshotv1api.VolumeSnap
 		return vsc, nil
 	}
 
+	// zhou: wait 10m for CSI completed snapshot.
+
 	// We'll wait 10m for the VSC to be reconciled polling every 5s unless csiSnapshotTimeout is set
 	timeout := defaultCSISnapshotTimeout
 	if csiSnapshotTimeout > 0 {
 		timeout = csiSnapshotTimeout
 	}
+
 	interval := 5 * time.Second
 	var snapshotContent *snapshotv1api.VolumeSnapshotContent
 

@@ -85,6 +85,9 @@ func removePVCAnnotations(pvc *corev1api.PersistentVolumeClaim, remove []string)
 	}
 }
 
+// zhou: because in restore, CSI will restore this PVC, which indicate the datasource,
+//       and then bind to a new provisioned PV with populated data.
+
 func resetPVCSpec(pvc *corev1api.PersistentVolumeClaim, vsName string) {
 	// Restore operation for the PVC will use the volumesnapshot as the data source.
 	// So clear out the volume name, which is a ref to the PV
@@ -139,8 +142,12 @@ func (p *PVCRestoreItemAction) Execute(input *velero.RestoreItemActionExecuteInp
 		}, nil
 	}
 
+	// zhou: due to PVC CR part anntotattion invalid after restore, we have to remove origin annotation,
+	//       and using snapshot to populate it.
 	removePVCAnnotations(&pvc,
 		[]string{AnnBindCompleted, AnnBoundByController, AnnStorageProvisioner, AnnBetaStorageProvisioner, AnnSelectedNode})
+
+	// zhou: but we we have to change namespace by plugin? velero restore controller should change it???
 
 	// If cross-namespace restore is configured, change the namespace
 	// for PVC object to be restored
@@ -149,6 +156,9 @@ func (p *PVCRestoreItemAction) Execute(input *velero.RestoreItemActionExecuteInp
 	}
 
 	operationID := ""
+
+	// zhou: if the annotation "velero.io/volume-snapshot-name" is set, which means
+	//       data of the PVC should be restored from VolumeSnapshot.
 
 	// remove the volumesnapshot name annotation as well
 	// clean the DataUploadNameLabel for snapshot data mover case.

@@ -48,5 +48,8 @@ site/vendor
 
 .vs
 
+cscope.files
+cscope.out
+
 _tiltbuild
 coverage.out

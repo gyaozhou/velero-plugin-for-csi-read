@@ -55,6 +55,7 @@ func (p *VolumeSnapshotClassBackupItemAction) Execute(item runtime.Unstructured,
 		return nil, nil, "", nil, errors.WithStack(err)
 	}
 
+	// zhou: README, secrets used by VolumeSnapshotClass ?
 	additionalItems := []velero.ResourceIdentifier{}
 	if util.IsVolumeSnapshotClassHasListerSecret(&snapClass) {
 		additionalItems = append(additionalItems, velero.ResourceIdentifier{

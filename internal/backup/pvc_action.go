@@ -46,6 +46,8 @@ import (
 	"github.com/vmware-tanzu/velero/pkg/util/boolptr"
 )
 
+// zhou: implements "type BackupItemAction interface {}"
+
 // PVCBackupItemAction is a backup item action plugin for Velero.
 type PVCBackupItemAction struct {
 	Log            logrus.FieldLogger
@@ -63,10 +65,14 @@ func (p *PVCBackupItemAction) AppliesTo() (velero.ResourceSelector, error) {
 	}, nil
 }
 
+// zhou: README,
+
 // Execute recognizes PVCs backed by volumes provisioned by CSI drivers with volumesnapshotting capability and creates snapshots of the
 // underlying PVs by creating volumesnapshot CSI API objects that will trigger the CSI driver to perform the snapshot operation on the volume.
 func (p *PVCBackupItemAction) Execute(item runtime.Unstructured, backup *velerov1api.Backup) (runtime.Unstructured, []velero.ResourceIdentifier, string, []velero.ResourceIdentifier, error) {
 	p.Log.Info("Starting PVCBackupItemAction")
+
+	// zhou: also controlled by this flag like cloud VolumeSnapshot.
 
 	// Do nothing if volume snapshots have not been requested in this backup
 	if boolptr.IsSetToFalse(backup.Spec.SnapshotVolumes) {
@@ -96,6 +102,8 @@ func (p *PVCBackupItemAction) Execute(item runtime.Unstructured, backup *velerov
 	if err != nil {
 		return nil, nil, "", nil, errors.WithStack(err)
 	}
+
+	// zhou: CSI only
 	if pv.Spec.PersistentVolumeSource.CSI == nil {
 		p.Log.Infof("Skipping PVC %s/%s, associated PV %s is not a CSI volume", pvc.Namespace, pvc.Name, pv.Name)
 
@@ -105,6 +113,8 @@ func (p *PVCBackupItemAction) Execute(item runtime.Unstructured, backup *velerov
 		data, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&pvc)
 		return &unstructured.Unstructured{Object: data}, nil, "", nil, err
 	}
+
+	// zhou: restic already backup this volume
 
 	// Do nothing if FS uploader is used to backup this PV
 	isFSUploaderUsed, err := util.IsPVCDefaultToFSBackup(pvc.Namespace, pvc.Name, p.Client.CoreV1(), boolptr.IsSetToTrue(backup.Spec.DefaultVolumesToFsBackup))
@@ -121,11 +131,15 @@ func (p *PVCBackupItemAction) Execute(item runtime.Unstructured, backup *velerov
 		return item, nil, "", nil, errors.Errorf("Cannot snapshot PVC %s/%s, PVC has no storage class.", pvc.Namespace, pvc.Name)
 	}
 
+	// zhou: get the StorageClass which create this PV
 	p.Log.Infof("Fetching storage class for PV %s", *pvc.Spec.StorageClassName)
 	storageClass, err := p.Client.StorageV1().StorageClasses().Get(context.TODO(), *pvc.Spec.StorageClassName, metav1.GetOptions{})
 	if err != nil {
 		return nil, nil, "", nil, errors.Wrap(err, "error getting storage class")
 	}
+
+	// zhou: find corresponding volumesnapshotclass with same provider and
+	//       has label "velero.io/csi-volumesnapshot-class"
 	p.Log.Debugf("Fetching volumesnapshot class for %s", storageClass.Provisioner)
 	snapshotClass, err := util.GetVolumeSnapshotClass(storageClass.Provisioner, backup, &pvc, p.Log, p.SnapshotClient.SnapshotV1())
 	if err != nil {
@@ -160,15 +174,23 @@ func (p *PVCBackupItemAction) Execute(item runtime.Unstructured, backup *velerov
 	}
 	p.Log.Infof("Created volumesnapshot %s", fmt.Sprintf("%s/%s", upd.Namespace, upd.Name))
 
+	// zhou: used in restore PVC, to determine whether need to set data source as VolumeSnapshot.
+
 	labels := map[string]string{
-		util.VolumeSnapshotLabel:    upd.Name,
+		// zhou: "velero.io/volume-snapshot-name"
+		util.VolumeSnapshotLabel: upd.Name,
+		// zhou: "velero.io/backup-name"
 		velerov1api.BackupNameLabel: backup.Name,
 	}
+
+	// zhou: the updated "pvc" will be backed up.
 
 	annotations := map[string]string{
 		util.VolumeSnapshotLabel:                 upd.Name,
 		util.MustIncludeAdditionalItemAnnotation: "true",
 	}
+
+	// zhou: additional resource to be backed up.
 
 	var additionalItems []velero.ResourceIdentifier
 	operationID := ""

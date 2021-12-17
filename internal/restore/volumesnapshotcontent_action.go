@@ -44,6 +44,8 @@ func (p *VolumeSnapshotContentRestoreItemAction) AppliesTo() (velero.ResourceSel
 	}, nil
 }
 
+// zhou: require additional item "secret" to be restored.
+
 // Execute restores a volumesnapshotcontent object without modification returning the snapshot lister secret, if any, as
 // additional items to restore.
 func (p *VolumeSnapshotContentRestoreItemAction) Execute(input *velero.RestoreItemActionExecuteInput) (*velero.RestoreItemActionExecuteOutput, error) {

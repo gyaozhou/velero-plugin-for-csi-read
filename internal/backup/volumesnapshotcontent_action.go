@@ -54,6 +54,8 @@ func (p *VolumeSnapshotContentBackupItemAction) AppliesTo() (velero.ResourceSele
 	}, nil
 }
 
+// zhou:
+
 // Execute returns the unmodified volumesnapshotcontent object along with the snapshot deletion secret, if any, from its annotation
 // as additional items to backup.
 func (p *VolumeSnapshotContentBackupItemAction) Execute(item runtime.Unstructured, backup *velerov1api.Backup) (runtime.Unstructured, []velero.ResourceIdentifier, string, []velero.ResourceIdentifier, error) {

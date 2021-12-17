@@ -49,6 +49,8 @@ func (p *VolumeSnapshotRestoreItemAction) AppliesTo() (velero.ResourceSelector, 
 	}, nil
 }
 
+// zhou: bind VolumeSnapshot with VolumeSnapshotContent.
+
 func resetVolumeSnapshotSpecForRestore(vs *snapshotv1api.VolumeSnapshot, vscName *string) {
 	// Spec of the backed-up object used the PVC as the source of the volumeSnapshot.
 	// Restore operation will however, restore the volumesnapshot from the volumesnapshotcontent
@@ -59,6 +61,8 @@ func resetVolumeSnapshotSpecForRestore(vs *snapshotv1api.VolumeSnapshot, vscName
 func resetVolumeSnapshotAnnotation(vs *snapshotv1api.VolumeSnapshot) {
 	vs.ObjectMeta.Annotations[util.CSIVSCDeletionPolicy] = string(snapshotv1api.VolumeSnapshotContentRetain)
 }
+
+// zhou:
 
 // Execute uses the data such as CSI driver name, storage snapshot handle, snapshot deletion secret (if any) from the annotations
 // to recreate a volumesnapshotcontent object and statically bind the Volumesnapshot object being restored.
@@ -74,6 +78,8 @@ func (p *VolumeSnapshotRestoreItemAction) Execute(input *velero.RestoreItemActio
 		return &velero.RestoreItemActionExecuteOutput{}, errors.Wrapf(err, "failed to convert input.Item from unstructured")
 	}
 
+	// zhou: VolumeSnapshot is namespaced resource, handle namespace mapping.
+
 	// If cross-namespace restore is configured, change the namespace
 	// for VolumeSnapshot object to be restored
 	if val, ok := input.Restore.Spec.NamespaceMapping[vs.GetNamespace()]; ok {
@@ -86,6 +92,9 @@ func (p *VolumeSnapshotRestoreItemAction) Execute(input *velero.RestoreItemActio
 	}
 
 	if !util.IsVolumeSnapshotExists(&vs, snapClient.SnapshotV1()) {
+
+		// zhou: these annotations describing VolumeSnapshotContent info, are set in backup.
+
 		snapHandle, exists := vs.Annotations[util.VolumeSnapshotHandleAnnotation]
 		if !exists {
 			return nil, errors.Errorf("Volumesnapshot %s/%s does not have a %s annotation", vs.Namespace, vs.Name, util.VolumeSnapshotHandleAnnotation)
@@ -98,6 +107,8 @@ func (p *VolumeSnapshotRestoreItemAction) Execute(input *velero.RestoreItemActio
 
 		p.Log.Debugf("Set VolumeSnapshotContent %s/%s DeletionPolicy to Retain to make sure VS deletion in namespace will not delete Snapshot on cloud provider.",
 			vs.Namespace, vs.Name)
+
+		// zhou: with these info, set VolumeSnapshotContent as addtional item.
 
 		// TODO: generated name will be like velero-velero-something. Fix that.
 		vsc := snapshotv1api.VolumeSnapshotContent{
@@ -121,6 +132,9 @@ func (p *VolumeSnapshotRestoreItemAction) Execute(input *velero.RestoreItemActio
 			},
 		}
 
+		// zhou: why not let Velero restore controller to create VolumeSnapshotContent ???
+		//       How about the VolumeSnapshotContent in backup ? Ownerreference deletion ???
+
 		// we create the volumesnapshotcontent here instead of relying on the restore flow because we want to statically
 		// bind this volumesnapshot with a volumesnapshotcontent that will be used as its source for pre-populating the
 		// volume that will be created as a result of the restore. To perform this static binding, a bi-didrectional link
@@ -132,6 +146,8 @@ func (p *VolumeSnapshotRestoreItemAction) Execute(input *velero.RestoreItemActio
 			return nil, errors.Wrapf(err, "failed to create volumesnapshotcontents %s", vsc.GenerateName)
 		}
 		p.Log.Infof("Created VolumesnapshotContents %s with static binding to volumesnapshot %s/%s", vscupd, vs.Namespace, vs.Name)
+
+		// zhou: bind
 
 		// Reset Spec to convert the volumesnapshot from using the dyanamic volumesnapshotcontent to the static one.
 		resetVolumeSnapshotSpecForRestore(&vs, &vscupd.Name)
